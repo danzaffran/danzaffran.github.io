@@ -30,31 +30,46 @@
             const g = 9.81;
             const L = 1.0;
             const gamma = 0.4;
-            const theta = [...Array(40).keys()].map(i => -2 * Math.PI + i * (4 * Math.PI / 40));
-            const omega = [...Array(40).keys()].map(i => -10 + i * (20 / 40));
+            const numPoints = 20;
+            const theta = [...Array(numPoints).keys()].map(i => -2 * Math.PI + i * (4 * Math.PI / numPoints));
+            const omega = [...Array(numPoints).keys()].map(i => -10 + i * (20 / numPoints));
             const Theta = [];
             const Omega = [];
+            const dTheta = [];
+            const dOmega = [];
+
             for (let i = 0; i < theta.length; i++) {
                 for (let j = 0; j < omega.length; j++) {
                     Theta.push(theta[i]);
                     Omega.push(omega[j]);
+                    dTheta.push(omega[j]);
+                    dOmega.push(-(g / L) * Math.sin(theta[i]) - gamma * omega[j]);
                 }
             }
 
             const quiverData = {
                 x: Theta,
                 y: Omega,
+                u: dTheta,
+                v: dOmega,
+                type: 'scatter',
                 mode: 'markers',
-                marker: { size: 2 }
+                marker: {
+                    size: 3,
+                    color: 'blue'
+                }
             };
 
-            Plotly.newPlot('vector-field', [quiverData], {
+            const layout = {
                 title: 'Vector Field of a Pendulum',
                 xaxis: { title: 'Angle (theta)' },
-                yaxis: { title: 'Angular Velocity (omega)' }
-            });
+                yaxis: { title: 'Angular Velocity (omega)' },
+                hovermode: 'closest'
+            };
 
-            function pendulumDeriv(state, t) {
+            Plotly.newPlot('vector-field', [quiverData], layout);
+
+            function pendulumDeriv(state) {
                 const [theta, omega] = state;
                 const dtheta_dt = omega;
                 const domega_dt = -(g / L) * Math.sin(theta) - gamma * omega;
@@ -66,7 +81,7 @@
                 let state = initialState;
                 const trajectory = [state];
                 for (let i = 1; i < t.length; i++) {
-                    const [dtheta_dt, domega_dt] = pendulumDeriv(state, t[i]);
+                    const [dtheta_dt, domega_dt] = pendulumDeriv(state);
                     state = [state[0] + dtheta_dt * dt, state[1] + domega_dt * dt];
                     trajectory.push(state);
                 }
@@ -132,3 +147,4 @@
     </script>
 </body>
 </html>
+
