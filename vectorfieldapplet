@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pendulum Phase Plot (RK4)</title>
+    <style>
+        canvas { border: 1px solid black; }
+    </style>
+</head>
+<body>
+    <h1>Pendulum Phase Plot (RK4)</h1>
+    <canvas id="plotCanvas" width="600" height="600"></canvas>
+    <br>
+    <input type="range" id="dampingSlider" min="0" max="1" step="0.01" value="0.1">
+    <label for="dampingSlider">Damping: <span id="dampingValue">0.1</span></label>
+
+    <script>
+        const canvas = document.getElementById('plotCanvas');
+        const ctx = canvas.getContext('2d');
+        const slider = document.getElementById('dampingSlider');
+        const dampingValue = document.getElementById('dampingValue');
+
+        let damping = 0.1;
+        let dragPoint = { x: 300, y: 300 };
+        let isDragging = false;
+
+        function f(t, y) {
+            return [
+                y[1],
+                -damping * y[1] - 9.81 * Math.sin(y[0])
+            ];
+        }
+
+        function rk4Step(t, y, h) {
+            let k1 = f(t, y);
+            let k2 = f(t + h/2, y.map((yi, i) => yi + h/2 * k1[i]));
+            let k3 = f(t + h/2, y.map((yi, i) => yi + h/2 * k2[i]));
+            let k4 = f(t + h, y.map((yi, i) => yi + h * k3[i]));
+
+            return y.map((yi, i) => yi + h/6 * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i]));
+        }
+
+        function drawVectorField() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            for (let x = 0; x <= 600; x += 30) {
+                for (let y = 0; y <= 600; y += 30) {
+                    const theta = (x - 300) / 20;
+                    const omega = (300 - y) / 20;
+                    const [dtheta, domega] = f(0, [theta, omega]);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + dtheta * 5, y - domega * 5);
+                    ctx.strokeStyle = 'rgba(0, 0, 255, 0.5)';
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function drawIntegralLine() {
+            ctx.beginPath();
+            ctx.moveTo(dragPoint.x, dragPoint.y);
+            
+            let t = 0;
+            let y = [(dragPoint.x - 300) / 20, (300 - dragPoint.y) / 20];
+            const h = 0.1;
+            
+            for (let i = 0; i < 1000; i++) {
+                y = rk4Step(t, y, h);
+                t += h;
+                
+                ctx.lineTo(y[0] * 20 + 300, 300 - y[1] * 20);
+            }
+            
+            ctx.strokeStyle = 'red';
+            ctx.stroke();
+        }
+
+        function draw() {
+            drawVectorField();
+            drawIntegralLine();
+            
+            ctx.beginPath();
+            ctx.arc(dragPoint.x, dragPoint.y, 5, 0, 2 * Math.PI);
+            ctx.fillStyle = 'green';
+            ctx.fill();
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (Math.abs(x - dragPoint.x) < 10 && Math.abs(y - dragPoint.y) < 10) {
+                isDragging = true;
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const rect = canvas.getBoundingClientRect();
+                dragPoint.x = e.clientX - rect.left;
+                dragPoint.y = e.clientY - rect.top;
+                draw();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        slider.addEventListener('input', () => {
+            damping = parseFloat(slider.value);
+            dampingValue.textContent = damping.toFixed(2);
+            draw();
+        });
+
+        draw();
+    </script>
+</body>
+</html>
