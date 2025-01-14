@@ -1,1 +1,283 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Population Sampling Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            font-size: 24px; /* New default size */
+        }
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .control-section {
+            width: 45%;
+        }
+        .stats {
+            margin-top: 10px;
+            font-size: 32px; /* Updated from 16px */
+        }
+        #chart {
+            height: 650px;
+            width: 100%;
+        }
+        .correlation-display {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="chart"></canvas>
+    
+    <div class="controls">
+        <div class="control-section">
+            <h3>Population</h3>
+            <label><input type="checkbox" id="togglePopulationDots" checked>Scatterplot</label>
+            <label><input type="checkbox" id="togglePopulationLine">Regression line</label>
+            <div id="populationStats" class="stats">
+                <div id="populationCorrelationDisplay" class="correlation-display"></div>
+                <div id="populationRegressionEquation" class="regression-equation"></div>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <h3>Sample</h3>
+            <label><input type="checkbox" id="toggleSampleDots" checked>Scatterplot</label>
+            <label><input type="checkbox" id="toggleSampleLine">Regression line</label>
+            <div id="sampleStats" the stats">
+                <div id="sampleCorrelationDisplay" class="correlation-display"></div>
+                <div id="sampleRegressionEquation" class="regression-equation"></div>
+            </div>
+        </div>
+    </div>
+    
+    <button id="newSampleBtn">New Sample</button>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof Chart !== 'undefined') {
+                initializeApp();
+            } else {
+                console.error('Chart.js library failed to load');
+            }
+        });
+
+        function generateZeroCorrelationData(nPoints) {
+            const data = [];
+            for (let i = 0; i < nPoints; i++) {
+                data.push({
+                    x: Math.random() * 100,
+                    y: Math.random() * 100
+                });
+            }
+            const initialRegression = calculateLinearRegression(data);
+            const originalSlope = initialRegression.slope;
+            data.forEach(point => {
+                point.y -= originalSlope * (point.x - 50);
+            });
+            return data;
+        }
+
+        function calculateCorrelation(data) {
+            const n = data.length;
+            const meanX = data.reduce((sum, point) => sum + point.x, 0) / n;
+            const meanY = data.reduce((sum, point) => sum + point.y, 0) / n;
+            let sumXY = 0, sumX2 = 0, sumY2 = 0;
+            data.forEach(point => {
+                const xDiff = point.x - meanX;
+                const yDiff = point.y - meanY;
+                sumXY += xDiff * yDiff;
+                sumX2 += xDiff * xDiff;
+                sumY2 += yDiff * yDiff;
+            });
+            const correlationCoeff = sumXY / Math.sqrt(sumX2 * sumY2);
+            return {
+                correlationCoefficient: correlationCoeff,
+                formattedCoefficient: correlationCoeff.toFixed(4)
+            };
+        }
+
+        function calculateLinearRegression(data) {
+            const n = data.length;
+            const meanX = data.reduce((sum, point) => sum + point.x, 0) / n;
+            const meanY = data.reduce((sum, point) => sum + point.y, 0) / n;
+            let numerator = 0, denominator = 0;
+            data.forEach(point => {
+                numerator += (point.x - meanX) * (point.y - meanY);
+                denominator += Math.pow(point.x - meanX, 2);
+            });
+            const slope = numerator / denominator;
+            const intercept = meanY - slope * meanX;
+            return {
+                slope,
+                intercept,
+                linePoints: [
+                    { x: 0, y: intercept },
+                    { x: 100, y: slope * 100 + intercept }
+                ]
+            };
+        }
+
+        function formatRegressionEquation(regression) {
+            const { slope, intercept } = regression;
+            const roundedSlope = slope.toFixed(4);
+            const roundedIntercept = intercept.toFixed(4);
+            const sign = intercept >= 0 ? '+' : '-';
+            return `y = ${roundedSlope}x ${sign} ${Math.abs(roundedIntercept)}`;
+        }
+
+        class PopulationSamplingApp {
+            constructor(data) {
+                this.populationData = data;
+                this.sampleData = [];
+                this.chart = this.createChart();
+                this.updateCorrelationDisplay();
+            }
+
+            createChart() {
+                const ctx = document.getElementById('chart').getContext('2d');
+                return new Chart(ctx, {
+                    type: 'scatter',
+                    data: {
+                        datasets: [
+                            {
+                                label: 'Population',
+                                data: this.populationData,
+                                backgroundColor: 'blue',
+                                showLine: false,
+                                fill: false
+                            },
+                            {
+                                label: 'Sample',
+                                data: this.sampleData,
+                                backgroundColor: 'red',
+                                showLine: false,
+                                fill: false
+                            },
+                            {
+                                label: 'Population Regression Line',
+                                data: calculateLinearRegression(this.populationData).linePoints,
+                                borderColor: 'blue',
+                                borderWidth: 2,
+                                showLine: false,
+                                fill: false,
+                                pointRadius: 0
+                            },
+                            {
+                                label: 'Sample Regression Line',
+                                data: [],
+                                borderColor: 'red',
+                                borderWidth: 2,
+                                showLine: false,
+                                fill: false,
+                                pointRadius: 0
+                            }
+                        ]
+                    },
+                    options: {
+                        animation: false,
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'X Value'
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Y Value'
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            }
+
+            updateCorrelationDisplay() {
+                const populationRegression = calculateLinearRegression(this.populationData);
+                const populationCorr = calculateCorrelation(this.populationData);
+                const populationLineCheckbox = document.getElementById('togglePopulationLine');
+                const populationDisplay = document.getElementById('populationCorrelationDisplay');
+                const populationEquationDisplay = document.getElementById('populationRegressionEquation');
+                if (populationLineCheckbox.checked) {
+                    populationDisplay.textContent = `r = ${populationCorr.formattedCoefficient}`;
+                    populationEquationDisplay.textContent = formatRegressionEquation(populationRegression);
+                    populationDisplay.style.display = 'block';
+                    populationEquationDisplay.style.display = 'block';
+                } else {
+                    populationDisplay.style.display = 'none';
+                    populationEquationDisplay.style.display = 'none';
+                }
+                if (this.sampleData.length > 0) {
+                    const sampleRegression = calculateLinearRegression(this.sampleData);
+                    const sampleCorr = calculateCorrelation(this.sampleData);
+                    const sampleLineCheckbox = document.getElementById('toggleSampleLine');
+                    const sampleDisplay = document.getElementById('sampleCorrelationDisplay');
+                    const sampleEquationDisplay = document.getElementById('sampleRegressionEquation');
+                    if (sampleLineCheckbox.checked) {
+                        sampleDisplay.textContent = `r = ${sampleCorr.formattedCoefficient}`;
+                        sampleEquationDisplay.textContent = formatRegressionEquation(sampleRegression);
+                        sampleDisplay.style.display = 'block';
+                        sampleEquationDisplay.style.display = 'block';
+                    } else {
+                        sampleDisplay.style.display = 'none';
+                        sampleEquationDisplay.style.display = 'none';
+                    }
+                }
+            }
+
+            newSample() {
+                this.sampleData.length = 0;
+                const sampleIndices = new Set();
+                while (sampleIndices.size < 25) {
+                    sampleIndices.add(Math.floor(Math.random() * this.populationData.length));
+                }
+                sampleIndices.forEach(index => this.sampleData.push({...this.populationData[index]}));
+                this.chart.data.datasets[0].data = this.populationData.map(point => ({...point, backgroundColor: 'blue'}));
+                this.chart.data.datasets[1].data = this.sampleData.map(point => ({...point, backgroundColor: 'red'}));
+                const sampleRegressionData = calculateLinearRegression(this.sampleData);
+                this.chart.data.datasets[3].data = sampleRegressionData.linePoints;
+                this.updateCorrelationDisplay();
+                this.chart.update();
+            }
+
+            toggleDots(event, datasetIndex) {
+                this.chart.data.datasets[datasetIndex].hidden = !event.target.checked;
+                this.chart.update();
+            }
+
+            toggleRegressionLine(event, datasetIndex) {
+                const regressionLineIndex = datasetIndex === 0 ? 2 : 3;
+                this.chart.data.datasets[regressionLineIndex].showLine = event.target.checked;
+                this.chart.update();
+                this.updateCorrelationDisplay();
+            }
+        }
+
+        function initializeApp() {
+            const data = generateZeroCorrelationData(200);
+            const app = new PopulationSamplingApp(data);
+            document.getElementById('newSampleBtn').addEventListener('click', () => app.newSample());
+            document.getElementById('togglePopulationDots').addEventListener('change', (e) => app.toggleDots(e, 0));
+            document.getElementById('togglePopulationLine').addEventListener('change', (e) => app.toggleRegressionLine(e, 0));
+            document.getElementById('toggleSampleDots').addEventListener('change', (e) => app.toggleDots(e, 1));
+            document.getElementById('toggleSampleLine').addEventListener('change', (e) => app.toggleRegressionLine(e, 1));
+        }
+    </script>
+</body>
+</html>
