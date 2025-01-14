@@ -1,282 +1,656 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Population Sampling Visualization</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            font-size: 24px; /* New default size */
-        }
-        .controls {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 20px;
-        }
-        .control-section {
-            width: 45%;
-        }
-        .stats {
-            margin-top: 10px;
-            font-size: 32px; /* Updated from 16px */
-        }
-        #chart {
-            height: 650px;
-            width: 100%;
-        }
-        .correlation-display {
-            margin-top: 10px;
-            font-weight: bold;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Enhanced Phase Plot with Pendulum</title>
+  <style>
+    /* Main Layout */
+    body {
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: 1fr 300px; /* Left: phase plot, Right: 300px panel */
+      grid-template-rows: 1fr;
+      height: 100vh;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      overflow: hidden;
+    }
+
+    /* Left side: Phase plot */
+    #mainContent {
+      grid-column: 1 / 2;
+      position: relative;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #canvasContainer {
+      width: 100%;
+      height: 100%;
+    }
+    #plotCanvas {
+      width: 100%;
+      height: 100%;
+      border: 1px solid #e2e8f0;
+      background: white;
+      box-sizing: border-box;
+    }
+
+    /* Right side: 2-row grid (settings on top, pendulum on bottom) */
+    #rightColumn {
+      grid-column: 2 / 3;
+      display: grid;
+      grid-template-rows: auto 300px; /* top row = auto, bottom row=300px for pendulum */
+      height: 100vh;
+      background-color: #f8fafc;
+      border-left: 1px solid #e2e8f0;
+      box-sizing: border-box;
+    }
+
+    /* Settings panel (no scrolling, compact spacing) */
+    #settingsPanel {
+      padding: 10px;
+      box-sizing: border-box;
+      overflow: visible;
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 1.1em;
+    }
+    .setting {
+      margin-bottom: 12px;
+    }
+    .setting label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.85em;
+      color: #1e293b;
+    }
+    input[type="range"] {
+      width: 100%;
+      font-size: 0.85em;
+    }
+
+    /* Pendulum canvas (bottom 300×300 row) */
+    #pendulumCanvas {
+      width: 300px;
+      height: 300px;
+      border: 1px solid #e2e8f0;
+      background: white;
+      display: block; /* Shown by default */
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
+  </style>
 </head>
 <body>
-    <canvas id="chart"></canvas>
-    
-    <div class="controls">
-        <div class="control-section">
-            <h3>Population</h3>
-            <label><input type="checkbox" id="togglePopulationDots" checked>Scatterplot</label>
-            <label><input type="checkbox" id="togglePopulationLine">Regression line</label>
-            <div id="populationStats" class="stats">
-                <div id="populationCorrelationDisplay" class="correlation-display"></div>
-                <div id="populationRegressionEquation" class="regression-equation"></div>
-            </div>
-        </div>
-        
-        <div class="control-section">
-            <h3>Sample</h3>
-            <label><input type="checkbox" id="toggleSampleDots" checked>Scatterplot</label>
-            <label><input type="checkbox" id="toggleSampleLine">Regression line</label>
-            <div id="sampleStats" the stats">
-                <div id="sampleCorrelationDisplay" class="correlation-display"></div>
-                <div id="sampleRegressionEquation" class="regression-equation"></div>
-            </div>
-        </div>
+  <!-- Left side: Phase Plot -->
+  <div id="mainContent">
+    <div id="canvasContainer">
+      <canvas id="plotCanvas"></canvas>
     </div>
-    
-    <button id="newSampleBtn">New Sample</button>
+  </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            if (typeof Chart !== 'undefined') {
-                initializeApp();
-            } else {
-                console.error('Chart.js library failed to load');
-            }
-        });
+  <!-- Right side: top= settings, bottom= pendulum -->
+  <div id="rightColumn">
+    <div id="settingsPanel">
+      <h2>Settings</h2>
+      <div class="setting">
+        <label for="dampingSlider">Damping: <span id="dampingValue">0.1</span></label>
+        <input type="range" id="dampingSlider" min="0" max="5" step="0.01" value="0.1"/>
+      </div>
+      <div class="setting">
+        <label for="vectorScaleSlider">Vector Scale: <span id="vectorScaleValue">1</span></label>
+        <input type="range" id="vectorScaleSlider" min="0.1" max="2" step="0.1" value="1"/>
+      </div>
+      <div class="setting">
+        <label for="vectorDensitySlider">Vector Density: <span id="vectorDensityValue">40</span></label>
+        <input type="range" id="vectorDensitySlider" min="10" max="100" step="5" value="40"/>
+      </div>
+      <div class="setting">
+        <label for="vectorThicknessSlider">Vector Thickness: <span id="vectorThicknessValue">1</span></label>
+        <input type="range" id="vectorThicknessSlider" min="0.5" max="5" step="0.1" value="1"/>
+      </div>
+      <div class="setting">
+        <label for="integralLineToggle">View Flow Line:</label>
+        <input type="checkbox" id="integralLineToggle" checked/>
+      </div>
+      <div class="setting">
+        <label for="lineThicknessSlider">Line Thickness: <span id="lineThicknessValue">1</span></label>
+        <input type="range" id="lineThicknessSlider" min="0.5" max="5" step="0.5" value="1"/>
+      </div>
+      <div class="setting">
+        <label for="animatePointToggle">Animate:</label>
+        <input type="checkbox" id="animatePointToggle" checked/>
+      </div>
+      <div class="setting">
+        <label for="pendulumToggle">Show Pendulum:</label>
+        <input type="checkbox" id="pendulumToggle" checked/>
+      </div>
+      <div class="setting">
+        <label for="bobWeightSlider">Bob Weight: <span id="bobWeightValue">10</span></label>
+        <input type="range" id="bobWeightSlider" min="1" max="30" step="0.1" value="10"/>
+      </div>
+    </div>
 
-        function generateZeroCorrelationData(nPoints) {
-            const data = [];
-            for (let i = 0; i < nPoints; i++) {
-                data.push({
-                    x: Math.random() * 100,
-                    y: Math.random() * 100
-                });
-            }
-            const initialRegression = calculateLinearRegression(data);
-            const originalSlope = initialRegression.slope;
-            data.forEach(point => {
-                point.y -= originalSlope * (point.x - 50);
-            });
-            return data;
+    <canvas id="pendulumCanvas"></canvas>
+  </div>
+
+  <script>
+    /* ==============================================
+       GLOBALS + PARAMETERS
+    =============================================== */
+    const canvas          = document.getElementById('plotCanvas');
+    const ctx             = canvas.getContext('2d');
+    const pendulumCanvas  = document.getElementById('pendulumCanvas');
+    const pendulumCtx     = pendulumCanvas.getContext('2d');
+
+    // Sliders & Inputs
+    const dampingSlider         = document.getElementById('dampingSlider');
+    const dampingValue          = document.getElementById('dampingValue');
+    const vectorScaleSlider     = document.getElementById('vectorScaleSlider');
+    const vectorScaleValue      = document.getElementById('vectorScaleValue');
+    const vectorDensitySlider   = document.getElementById('vectorDensitySlider');
+    const vectorDensityValue    = document.getElementById('vectorDensityValue');
+    const vectorThicknessSlider = document.getElementById('vectorThicknessSlider');
+    const vectorThicknessValue  = document.getElementById('vectorThicknessValue');
+    const lineThicknessSlider   = document.getElementById('lineThicknessSlider');
+    const lineThicknessValue    = document.getElementById('lineThicknessValue');
+    const bobWeightSlider       = document.getElementById('bobWeightSlider');
+    const bobWeightValue        = document.getElementById('bobWeightValue');
+
+    const integralLineToggle  = document.getElementById('integralLineToggle');
+    const animatePointToggle  = document.getElementById('animatePointToggle');
+    const pendulumToggle      = document.getElementById('pendulumToggle');
+
+    // Simulation state
+    let damping          = 0.1;
+    let vectorScale      = 0.6;
+    let vectorDensity    = 60;
+    let lineThickness    = 3;
+    let bobWeight        = 10;
+    let vectorThickness  = 3;
+    let viewIntegralLine = true;   // default ON
+    let animatePoint     = true;   // default ON
+    let dragPoint        = { x: 600, y: 350 };
+    let isDragging       = false;
+    let zoom             = 1.5;
+    let offsetX          = 0;
+    let offsetY          = 0;
+    let animationFrameId;
+    let t                = 0;
+    let initialPoint     = { x: 600, y: 350 };
+    let Alpha            = 0; // "feather" rotation
+    const verticalCompressionFactor = 1;
+    const SCALING_FACTOR = 0.08; // for feather image scaling
+
+    // Feather image
+    let featherImage = new Image();
+    featherImage.src = 'feather.svg';
+    featherImage.onload = () => {
+      console.log("Feather image loaded successfully");
+    };
+
+    /* ==============================================
+       ODE:  y=[theta, omega]
+         theta' = omega
+         omega' = -damping*omega - (9.81/bobWeight)*sin(theta)
+    =============================================== */
+    function f(t, y) {
+      return [
+        y[1],
+        -damping * y[1] - (9.81 / bobWeight) * Math.sin(y[0])
+      ];
+    }
+
+    function rk4Step(t, y, h) {
+      let k1 = f(t, y);
+      let k2 = f(t + h/2, y.map((yi, i) => yi + (h/2)*k1[i]));
+      let k3 = f(t + h/2, y.map((yi, i) => yi + (h/2)*k2[i]));
+      let k4 = f(t + h,   y.map((yi, i) => yi + h*k3[i]));
+
+      return y.map((yi, i) => yi + (h/6)*(k1[i] + 2*k2[i] + 2*k3[i] + k4[i]));
+    }
+
+    /* ==============================================
+       DRAW: Vector Field
+    =============================================== */
+    function drawVectorField() {
+      canvas.width  = document.getElementById('canvasContainer').clientWidth;
+      canvas.height = document.getElementById('canvasContainer').clientHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const stepSize = vectorDensity / zoom;
+      for (let x = 0; x <= canvas.width; x += stepSize) {
+        for (let y = 0; y <= canvas.height; y += stepSize) {
+          const theta = ((x - canvas.width/2) / (40 * zoom) + offsetX);
+          const omega = ((canvas.height/2 - y) / (40 * zoom) + offsetY) * verticalCompressionFactor;
+
+          const [dtheta, domega] = f(0, [theta, omega]);
+          let magnitude = Math.sqrt(dtheta*dtheta + domega*domega);
+          let scale = Math.min(15 / magnitude, 1) * vectorScale / zoom;
+
+          drawArrow(
+            x,
+            y,
+            x + dtheta * scale * 40,
+            y - domega * scale * 40 / verticalCompressionFactor,
+            vectorThickness,
+            'darkgreen'
+          );
         }
+      }
+    }
 
-        function calculateCorrelation(data) {
-            const n = data.length;
-            const meanX = data.reduce((sum, point) => sum + point.x, 0) / n;
-            const meanY = data.reduce((sum, point) => sum + point.y, 0) / n;
-            let sumXY = 0, sumX2 = 0, sumY2 = 0;
-            data.forEach(point => {
-                const xDiff = point.x - meanX;
-                const yDiff = point.y - meanY;
-                sumXY += xDiff * yDiff;
-                sumX2 += xDiff * xDiff;
-                sumY2 += yDiff * yDiff;
-            });
-            const correlationCoeff = sumXY / Math.sqrt(sumX2 * sumY2);
-            return {
-                correlationCoefficient: correlationCoeff,
-                formattedCoefficient: correlationCoeff.toFixed(4)
-            };
-        }
+    /* 
+      Draw an arrow from (fromx, fromy) to (tox, toy)
+    */
+    function drawArrow(fromx, fromy, tox, toy, arrowWidth, color) {
+      const headlen = 10 / zoom;
+      const dx = tox - fromx;
+      const dy = toy - fromy;
+      const angle = Math.atan2(dy, dx);
 
-        function calculateLinearRegression(data) {
-            const n = data.length;
-            const meanX = data.reduce((sum, point) => sum + point.x, 0) / n;
-            const meanY = data.reduce((sum, point) => sum + point.y, 0) / n;
-            let numerator = 0, denominator = 0;
-            data.forEach(point => {
-                numerator += (point.x - meanX) * (point.y - meanY);
-                denominator += Math.pow(point.x - meanX, 2);
-            });
-            const slope = numerator / denominator;
-            const intercept = meanY - slope * meanX;
-            return {
-                slope,
-                intercept,
-                linePoints: [
-                    { x: 0, y: intercept },
-                    { x: 100, y: slope * 100 + intercept }
-                ]
-            };
-        }
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = arrowWidth / zoom;
+      ctx.beginPath();
+      ctx.moveTo(fromx, fromy);
+      ctx.lineTo(tox, toy);
 
-        function formatRegressionEquation(regression) {
-            const { slope, intercept } = regression;
-            const roundedSlope = slope.toFixed(4);
-            const roundedIntercept = intercept.toFixed(4);
-            const sign = intercept >= 0 ? '+' : '-';
-            return `y = ${roundedSlope}x ${sign} ${Math.abs(roundedIntercept)}`;
-        }
+      // Arrowhead
+      ctx.lineTo(
+        tox - headlen * Math.cos(angle - Math.PI / 6),
+        toy - headlen * Math.sin(angle - Math.PI / 6)
+      );
+      ctx.moveTo(tox, toy);
+      ctx.lineTo(
+        tox - headlen * Math.cos(angle + Math.PI / 6),
+        toy - headlen * Math.sin(angle + Math.PI / 6)
+      );
+      ctx.stroke();
+    }
 
-        class PopulationSamplingApp {
-            constructor(data) {
-                this.populationData = data;
-                this.sampleData = [];
-                this.chart = this.createChart();
-                this.updateCorrelationDisplay();
-            }
+    /* ==============================================
+       DRAW: Integral Line from initialPoint
+    =============================================== */
+    function drawIntegralLine() {
+      if (!viewIntegralLine || !initialPoint) return;
 
-            createChart() {
-                const ctx = document.getElementById('chart').getContext('2d');
-                return new Chart(ctx, {
-                    type: 'scatter',
-                    data: {
-                        datasets: [
-                            {
-                                label: 'Population',
-                                data: this.populationData,
-                                backgroundColor: 'blue',
-                                showLine: false,
-                                fill: false
-                            },
-                            {
-                                label: 'Sample',
-                                data: this.sampleData,
-                                backgroundColor: 'red',
-                                showLine: false,
-                                fill: false
-                            },
-                            {
-                                label: 'Population Regression Line',
-                                data: calculateLinearRegression(this.populationData).linePoints,
-                                borderColor: 'blue',
-                                borderWidth: 2,
-                                showLine: false,
-                                fill: false,
-                                pointRadius: 0
-                            },
-                            {
-                                label: 'Sample Regression Line',
-                                data: [],
-                                borderColor: 'red',
-                                borderWidth: 2,
-                                showLine: false,
-                                fill: false,
-                                pointRadius: 0
-                            }
-                        ]
-                    },
-                    options: {
-                        animation: false,
-                        scales: {
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'X Value'
-                                }
-                            },
-                            y: {
-                                title: {
-                                    display: true,
-                                    text: 'Y Value'
-                                }
-                            }
-                        },
-                        plugins: {
-                            legend: {
-                                position: 'bottom'
-                            }
-                        }
-                    }
-                });
-            }
+      ctx.beginPath();
+      ctx.moveTo(initialPoint.x, initialPoint.y);
 
-            updateCorrelationDisplay() {
-                const populationRegression = calculateLinearRegression(this.populationData);
-                const populationCorr = calculateCorrelation(this.populationData);
-                const populationLineCheckbox = document.getElementById('togglePopulationLine');
-                const populationDisplay = document.getElementById('populationCorrelationDisplay');
-                const populationEquationDisplay = document.getElementById('populationRegressionEquation');
-                if (populationLineCheckbox.checked) {
-                    populationDisplay.textContent = `r = ${populationCorr.formattedCoefficient}`;
-                    populationEquationDisplay.textContent = formatRegressionEquation(populationRegression);
-                    populationDisplay.style.display = 'block';
-                    populationEquationDisplay.style.display = 'block';
-                } else {
-                    populationDisplay.style.display = 'none';
-                    populationEquationDisplay.style.display = 'none';
-                }
-                if (this.sampleData.length > 0) {
-                    const sampleRegression = calculateLinearRegression(this.sampleData);
-                    const sampleCorr = calculateCorrelation(this.sampleData);
-                    const sampleLineCheckbox = document.getElementById('toggleSampleLine');
-                    const sampleDisplay = document.getElementById('sampleCorrelationDisplay');
-                    const sampleEquationDisplay = document.getElementById('sampleRegressionEquation');
-                    if (sampleLineCheckbox.checked) {
-                        sampleDisplay.textContent = `r = ${sampleCorr.formattedCoefficient}`;
-                        sampleEquationDisplay.textContent = formatRegressionEquation(sampleRegression);
-                        sampleDisplay.style.display = 'block';
-                        sampleEquationDisplay.style.display = 'block';
-                    } else {
-                        sampleDisplay.style.display = 'none';
-                        sampleEquationDisplay.style.display = 'none';
-                    }
-                }
-            }
+      let tLocal = 0;
+      let y = [
+        (initialPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - initialPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ];
+      const h = 0.1;
 
-            newSample() {
-                this.sampleData.length = 0;
-                const sampleIndices = new Set();
-                while (sampleIndices.size < 25) {
-                    sampleIndices.add(Math.floor(Math.random() * this.populationData.length));
-                }
-                sampleIndices.forEach(index => this.sampleData.push({...this.populationData[index]}));
-                this.chart.data.datasets[0].data = this.populationData.map(point => ({...point, backgroundColor: 'blue'}));
-                this.chart.data.datasets[1].data = this.sampleData.map(point => ({...point, backgroundColor: 'red'}));
-                const sampleRegressionData = calculateLinearRegression(this.sampleData);
-                this.chart.data.datasets[3].data = sampleRegressionData.linePoints;
-                this.updateCorrelationDisplay();
-                this.chart.update();
-            }
+      for (let i = 0; i < 1000; i++) {
+        y = rk4Step(tLocal, y, h);
+        tLocal += h;
+        const xCoord = (y[0] - offsetX) * 40 * zoom + canvas.width/2;
+        const yCoord = canvas.height/2 - (y[1]/verticalCompressionFactor - offsetY) * 40 * zoom;
+        ctx.lineTo(xCoord, yCoord);
+      }
 
-            toggleDots(event, datasetIndex) {
-                this.chart.data.datasets[datasetIndex].hidden = !event.target.checked;
-                this.chart.update();
-            }
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
+      ctx.lineWidth   = lineThickness;
+      ctx.stroke();
+    }
 
-            toggleRegressionLine(event, datasetIndex) {
-                const regressionLineIndex = datasetIndex === 0 ? 2 : 3;
-                this.chart.data.datasets[regressionLineIndex].showLine = event.target.checked;
-                this.chart.update();
-                this.updateCorrelationDisplay();
-            }
-        }
+    /* ==============================================
+       DRAW: Feather marker at dragPoint
+    =============================================== */
+    function drawFeather(x, y, angle) {
+      if (!featherImage.complete) return;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.drawImage(
+        featherImage,
+        -(featherImage.width * SCALING_FACTOR) / 2,
+        -(featherImage.height * SCALING_FACTOR) / 2,
+        featherImage.width * SCALING_FACTOR,
+        featherImage.height * SCALING_FACTOR
+      );
+      ctx.restore();
+    }
 
-        function initializeApp() {
-            const data = generateZeroCorrelationData(200);
-            const app = new PopulationSamplingApp(data);
-            document.getElementById('newSampleBtn').addEventListener('click', () => app.newSample());
-            document.getElementById('togglePopulationDots').addEventListener('change', (e) => app.toggleDots(e, 0));
-            document.getElementById('togglePopulationLine').addEventListener('change', (e) => app.toggleRegressionLine(e, 0));
-            document.getElementById('toggleSampleDots').addEventListener('change', (e) => app.toggleDots(e, 1));
-            document.getElementById('toggleSampleLine').addEventListener('change', (e) => app.toggleRegressionLine(e, 1));
-        }
-    </script>
+    /* ==============================================
+       DRAW: entire Phase Plot
+    =============================================== */
+    function draw() {
+      drawVectorField();
+      drawIntegralLine();
+      drawFeather(dragPoint.x, dragPoint.y, Alpha);
+    }
+
+    /* ==============================================
+       OMEGA ARC: around the pivot, offset from the bob
+       - Arc length is 1.5x scaled, capped at pi/2
+       - Arc start depends on sign(omega), so we remain near the bob
+       - Arrow tip points away from bob
+    =============================================== */
+    function drawOmegaArc(ctx, pivotX, pivotY, length, theta, omega) {
+      const absOmega = Math.abs(omega);
+      if (absOmega < 0.01) return;
+
+      // base arc span
+      const factor = 0.15;
+      let arcSpan  = Math.min(absOmega * factor, Math.PI / 2);
+
+      // scale by 1.5
+      arcSpan *= 1.5;
+
+      // offset by 10 deg
+      const offsetDeg = 10;
+      const offsetRad = (offsetDeg * Math.PI) / 180;
+
+      /*
+         We'll define anglePivot = (Math.PI/2) - theta,
+         so if theta=0 => anglePivot = pi/2 (straight down in canvas).
+         
+         For omega>0 => pendulum rotates clockwise
+           => startAngle = anglePivot + offsetRad
+           => endAngle   = startAngle - arcSpan
+           => anticlockwise = true (canvas arc in clockwise direction)
+           => arrow tip tangentAngle = endAngle + pi/2
+         For omega<0 => rotates CCW
+           => startAngle = anglePivot - offsetRad
+           => endAngle   = startAngle + arcSpan
+           => anticlockwise = false
+           => arrow tip tangentAngle = endAngle - pi/2
+      */
+      const anglePivot = (Math.PI / 2) - theta; 
+
+      let startAngle, endAngle, anticlockwise;
+      if (omega > 0) {
+        // clockwise => arc from startAngle => endAngle decreasing
+        startAngle    = anglePivot - offsetRad;
+        endAngle      = startAngle - arcSpan;
+        anticlockwise = true;
+      } else {
+        // CCW => arc from startAngle => endAngle increasing
+        startAngle    = anglePivot + offsetRad;
+        endAngle      = startAngle + arcSpan;
+        anticlockwise = false;
+      }
+
+      // Draw arc on circle of radius=length around pivot
+      ctx.save();
+      ctx.strokeStyle = 'brown';
+      ctx.lineWidth   = 2;
+
+      ctx.beginPath();
+      ctx.arc(pivotX, pivotY, length, startAngle, endAngle, anticlockwise);
+      ctx.stroke();
+
+      // End of arc
+      const arrowX = pivotX + length * Math.cos(endAngle);
+      const arrowY = pivotY + length * Math.sin(endAngle);
+
+      // Arrow orientation depends on sign(omega)
+      let tangentAngle;
+      if (omega > 0) {
+        tangentAngle = endAngle + Math.PI / 2;
+      } else {
+        tangentAngle = endAngle - Math.PI / 2;
+      }
+
+      const arrowLen = 8;
+      ctx.beginPath();
+      ctx.moveTo(arrowX, arrowY);
+      ctx.lineTo(
+        arrowX + arrowLen * Math.cos(tangentAngle - 0.3),
+        arrowY + arrowLen * Math.sin(tangentAngle - 0.3)
+      );
+      ctx.moveTo(arrowX, arrowY);
+      ctx.lineTo(
+        arrowX + arrowLen * Math.cos(tangentAngle + 0.3),
+        arrowY + arrowLen * Math.sin(tangentAngle + 0.3)
+      );
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    /* ==============================================
+       DRAW PENDULUM in 300×300 canvas
+       - Show the curved arc if dragging
+    =============================================== */
+    function drawPendulum(y) {
+      if (pendulumCanvas.style.display === 'none') return;
+
+      pendulumCanvas.width  = 300;
+      pendulumCanvas.height = 300;
+      pendulumCtx.clearRect(0, 0, 300, 300);
+
+      const originX = 150; 
+      const originY = 150; 
+      const length  = 100; 
+      const theta   = y[0];
+      const omega   = y[1];
+
+      // Bob position
+      const bobX = originX + length * Math.sin(theta);
+      const bobY = originY + length * Math.cos(theta);
+
+      // Rod
+      pendulumCtx.beginPath();
+      pendulumCtx.moveTo(originX, originY);
+      pendulumCtx.lineTo(bobX, bobY);
+      pendulumCtx.strokeStyle = 'brown';
+      pendulumCtx.lineWidth   = 3;
+      pendulumCtx.stroke();
+
+      // Bob
+      pendulumCtx.beginPath();
+      pendulumCtx.arc(bobX, bobY, 10, 0, 2*Math.PI);
+      pendulumCtx.fillStyle = 'brown';
+      pendulumCtx.fill();
+
+      // If user is dragging => show arc near pivot
+      if (isDragging) {
+        drawOmegaArc(pendulumCtx, originX, originY, length, theta, omega);
+      }
+    }
+
+    /* ==============================================
+       FEATHER ROTATION: "curl" measure
+    =============================================== */
+    function computeCurl(x, y) {
+      const theta = ((x - canvas.width / 2) / (40 * zoom) + offsetX);
+      const omega = ((canvas.height / 2 - y) / (40 * zoom) + offsetY) * verticalCompressionFactor;
+      const dF_y_dtheta = -(9.81 / bobWeight) * Math.cos(theta);
+      const dF_x_domega = 1;
+      return dF_y_dtheta - dF_x_domega;
+    }
+
+    /* ==============================================
+       ANIMATE POINT (if "Animate Point" is ON)
+    =============================================== */
+    function animatePointStep() {
+      if (!animatePoint) return;
+      t += 0.05;
+
+      let y = [
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ];
+      y = rk4Step(t, y, 0.05);
+
+      // Rotate feather by local "curl"
+      Alpha -= computeCurl(dragPoint.x, dragPoint.y) * 0.01;
+
+      // Convert back to screen coords
+      dragPoint.x = (y[0] - offsetX) * 40 * zoom + canvas.width/2;
+      dragPoint.y = canvas.height/2 - (y[1]/verticalCompressionFactor - offsetY) * 40 * zoom;
+
+      draw();
+      drawPendulum(y);
+      animationFrameId = requestAnimationFrame(animatePointStep);
+    }
+
+    /* ==============================================
+       EVENT: Mouse - drag for new initial conditions
+    =============================================== */
+    canvas.addEventListener('mousedown', (e) => {
+      cancelAnimationFrame(animationFrameId);
+
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      isDragging = true;
+      dragPoint.x = x;
+      dragPoint.y = y;
+      initialPoint = { x, y };
+      t = 0;
+      Alpha = 0;
+
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const rect = canvas.getBoundingClientRect();
+      dragPoint.x = e.clientX - rect.left;
+      dragPoint.y = e.clientY - rect.top;
+
+      initialPoint = { x: dragPoint.x, y: dragPoint.y };
+      Alpha = 0;
+
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      isDragging = false;
+      // If animate is on, resume
+      if (animatePoint) {
+        animatePointStep();
+      } else {
+        // Otherwise remove the arc
+        draw();
+        drawPendulum(currentPendulumState());
+      }
+    });
+
+    /* ==============================================
+       EVENT: Zoom with wheel
+    =============================================== */
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+      zoom *= zoomFactor;
+
+      offsetX += (mouseX - canvas.width/2) / (40*zoom) * (1 - 1/zoomFactor);
+      offsetY += (canvas.height/2 - mouseY) / (40*zoom) * (1 - 1/zoomFactor);
+
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    /* ==============================================
+       SLIDERS & CHECKBOXES
+    =============================================== */
+    dampingSlider.addEventListener('input', () => {
+      damping = parseFloat(dampingSlider.value);
+      dampingValue.textContent = damping.toFixed(2);
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    vectorScaleSlider.addEventListener('input', () => {
+      vectorScale = parseFloat(vectorScaleSlider.value);
+      vectorScaleValue.textContent = vectorScale.toFixed(1);
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    vectorDensitySlider.addEventListener('input', () => {
+      vectorDensity = parseInt(vectorDensitySlider.value);
+      vectorDensityValue.textContent = vectorDensity;
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    vectorThicknessSlider.addEventListener('input', () => {
+      vectorThickness = parseFloat(vectorThicknessSlider.value);
+      vectorThicknessValue.textContent = vectorThickness.toFixed(1);
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    lineThicknessSlider.addEventListener('input', () => {
+      lineThickness = parseFloat(lineThicknessSlider.value);
+      lineThicknessValue.textContent = lineThickness.toFixed(1);
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    bobWeightSlider.addEventListener('input', () => {
+      bobWeight = parseFloat(bobWeightSlider.value);
+      bobWeightValue.textContent = bobWeight.toFixed(1);
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    integralLineToggle.addEventListener('change', () => {
+      viewIntegralLine = integralLineToggle.checked;
+      draw();
+      drawPendulum(currentPendulumState());
+    });
+
+    animatePointToggle.addEventListener('change', () => {
+      animatePoint = animatePointToggle.checked;
+      if (animatePoint && !isDragging) {
+        t = 0;
+        animatePointStep();
+      } else {
+        cancelAnimationFrame(animationFrameId);
+        draw();
+        drawPendulum(currentPendulumState());
+      }
+    });
+
+    pendulumToggle.addEventListener('change', () => {
+      pendulumCanvas.style.display = pendulumToggle.checked ? 'block' : 'none';
+      drawPendulum(currentPendulumState());
+    });
+
+    /* ==============================================
+       HELPER: current pendulum state in [theta, omega]
+    =============================================== */
+    function currentPendulumState() {
+      let y = [
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ];
+      return y;
+    }
+
+    /* ==============================================
+       INIT
+    =============================================== */
+    viewIntegralLine = integralLineToggle.checked; 
+    animatePoint     = animatePointToggle.checked; 
+    pendulumCanvas.style.display = pendulumToggle.checked ? 'block' : 'none';
+
+    // Initial draw
+    draw();
+    drawPendulum(currentPendulumState());
+
+    // Start animation if "Animate Point" is ON
+    if (animatePoint) {
+      animatePointStep();
+    }
+  </script>
 </body>
 </html>
