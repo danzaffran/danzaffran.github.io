@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Enhanced Phase Plot Animation</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      grid-template-rows: 1fr;
+      height: 100vh;
+      font-family: system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+    }
+
+    /* Left side: main content */
+    #mainContent {
+      grid-column: 1 / 2;
+      position: relative;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #canvasContainer {
+      width: 100%;
+      height: 100%;
+    }
+    #plotCanvas {
+      width: 100%;
+      height: 100%;
+      border: 1px solid #e2e8f0;
+      background: white;
+      box-sizing: border-box;
+    }
+
+    /* Right side: two rows: top (auto) for settings, bottom (fixed 300px) for pendulum */
+    #rightColumn {
+      grid-column: 2 / 3;
+      display: grid;
+      grid-template-rows: auto 300px; /* top row grows to fit content, bottom row is 300px */
+      height: 100vh;
+      background-color: #f8fafc;
+      border-left: 1px solid #e2e8f0;
+      box-sizing: border-box;
+    }
+
+    /* Settings panel (no scrolling) */
+    #settingsPanel {
+      padding: 20px;
+      box-sizing: border-box;
+      overflow: visible; /* no scroll; content might overflow if too tall */
+    }
+
+    .setting {
+      margin-bottom: 20px;
+    }
+    .setting label {
+      display: block;
+      margin-bottom: 8px;
+      color: #1e293b;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+
+    /* Pendulum in the bottom row, always exactly 300×300 visible */
+    #pendulumCanvas {
+      width: 300px;
+      height: 300px;
+      border: 1px solid #e2e8f0;
+      background: white;
+      display: block; /* Shown by default, because we start the toggle on */
+      margin: 0 auto; /* center horizontally */
+      box-sizing: border-box;
+    }
+
+    h1, h2 {
+      color: #0f172a;
+      margin-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Left side content -->
+  <div id="mainContent">
+    <div id="canvasContainer">
+      <canvas id="plotCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Right side: 2 rows (top: settings, bottom: pendulum) -->
+  <div id="rightColumn">
+    <div id="settingsPanel">
+      <h2>Settings</h2>
+      <div class="setting">
+        <label for="dampingSlider">Damping: <span id="dampingValue">0.1</span></label>
+        <input type="range" id="dampingSlider" min="0" max="5" step="0.01" value="0.1"/>
+      </div>
+      <div class="setting">
+        <label for="vectorScaleSlider">Vector Scale: <span id="vectorScaleValue">1</span></label>
+        <input type="range" id="vectorScaleSlider" min="0.1" max="2" step="0.1" value="1"/>
+      </div>
+      <div class="setting">
+        <label for="vectorDensitySlider">Vector Density: <span id="vectorDensityValue">40</span></label>
+        <input type="range" id="vectorDensitySlider" min="10" max="100" step="5" value="40"/>
+      </div>
+      <div class="setting">
+        <label for="vectorThicknessSlider">Vector Thickness: <span id="vectorThicknessValue">1</span></label>
+        <input type="range" id="vectorThicknessSlider" min="0.5" max="5" step="0.1" value="1"/>
+      </div>
+      <div class="setting">
+        <label for="integralLineToggle">View Flow Line: </label>
+        <input type="checkbox" id="integralLineToggle" checked/>
+      </div>
+      <div class="setting">
+        <label for="lineThicknessSlider">Line Thickness: <span id="lineThicknessValue">1</span></label>
+        <input type="range" id="lineThicknessSlider" min="0.5" max="5" step="0.5" value="1"/>
+      </div>
+      <div class="setting">
+        <label for="animatePointToggle">Animate Point: </label>
+        <input type="checkbox" id="animatePointToggle" checked/>
+      </div>
+      <div class="setting">
+        <label for="pendulumToggle">Show Pendulum: </label>
+        <input type="checkbox" id="pendulumToggle" checked/>
+      </div>
+      <div class="setting">
+        <label for="bobWeightSlider">Bob Weight: <span id="bobWeightValue">10</span></label>
+        <input type="range" id="bobWeightSlider" min="1" max="30" step="0.1" value="10"/>
+      </div>
+    </div>
+
+    <!-- Bottom row: fixed 300px high for the pendulum -->
+    <canvas id="pendulumCanvas"></canvas>
+  </div>
+
+  <script>
+    const canvas             = document.getElementById('plotCanvas');
+    const ctx                = canvas.getContext('2d');
+    const pendulumCanvas     = document.getElementById('pendulumCanvas');
+    const pendulumCtx        = pendulumCanvas.getContext('2d');
+
+    // Sliders/Inputs
+    const dampingSlider         = document.getElementById('dampingSlider');
+    const dampingValue          = document.getElementById('dampingValue');
+    const vectorScaleSlider     = document.getElementById('vectorScaleSlider');
+    const vectorScaleValue      = document.getElementById('vectorScaleValue');
+    const vectorDensitySlider   = document.getElementById('vectorDensitySlider');
+    const vectorDensityValue    = document.getElementById('vectorDensityValue');
+    const vectorThicknessSlider = document.getElementById('vectorThicknessSlider');
+    const vectorThicknessValue  = document.getElementById('vectorThicknessValue');
+    const lineThicknessSlider   = document.getElementById('lineThicknessSlider');
+    const lineThicknessValue    = document.getElementById('lineThicknessValue');
+    const bobWeightSlider       = document.getElementById('bobWeightSlider');
+    const bobWeightValue        = document.getElementById('bobWeightValue');
+
+    const integralLineToggle  = document.getElementById('integralLineToggle');
+    const animatePointToggle  = document.getElementById('animatePointToggle');
+    const pendulumToggle      = document.getElementById('pendulumToggle');
+
+    // Parameters
+    let damping               = 0.1;
+    let vectorScale           = 0.6;
+    let vectorDensity         = 60;
+    let lineThickness         = 3;
+    let bobWeight             = 10;
+    let vectorThickness       = 3;
+    let viewIntegralLine      = true;   // default ON
+    let animatePoint          = true;   // default ON
+    let dragPoint             = { x: 600, y: 350 };
+    let isDragging            = false;
+    let zoom                  = 1.5;
+    let offsetX               = 0;
+    let offsetY               = 0;
+    let animationFrameId;
+    let t                     = 0;
+    let initialPoint          = { x: 600, y: 350 };
+    let Alpha                 = 0;
+    const verticalCompressionFactor = 1;
+    const SCALING_FACTOR      = 0.08;
+
+    // Load feather image
+    let featherImage = new Image();
+    featherImage.src = 'feather.svg';
+    featherImage.onload = () => {
+      console.log("Feather image loaded successfully");
+    };
+
+    // ODE system: theta' = omega,  omega' = ...
+    function f(t, y) {
+      return [
+        y[1],
+        -damping * y[1] - (9.81 / bobWeight) * Math.sin(y[0])
+      ];
+    }
+
+    // 4th-order Runge-Kutta step
+    function rk4Step(t, y, h) {
+      let k1 = f(t, y);
+      let k2 = f(t + h/2, y.map((yi, i) => yi + h/2 * k1[i]));
+      let k3 = f(t + h/2, y.map((yi, i) => yi + h/2 * k2[i]));
+      let k4 = f(t + h,   y.map((yi, i) => yi + h   * k3[i]));
+
+      return y.map((yi, i) => yi + h/6 * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i]));
+    }
+
+    // Draw an arrow for the vector field
+    function drawArrow(fromx, fromy, tox, toy, arrowWidth, color){
+      const headlen = 10 / zoom; // scale arrow head with zoom
+      const dx = tox - fromx;
+      const dy = toy - fromy;
+      const angle = Math.atan2(dy, dx);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = arrowWidth / zoom; // scale line width with zoom
+      ctx.beginPath();
+      ctx.moveTo(fromx, fromy);
+      ctx.lineTo(tox, toy);
+      ctx.lineTo(
+        tox - headlen * Math.cos(angle - Math.PI / 6),
+        toy - headlen * Math.sin(angle - Math.PI / 6)
+      );
+      ctx.moveTo(tox, toy);
+      ctx.lineTo(
+        tox - headlen * Math.cos(angle + Math.PI / 6),
+        toy - headlen * Math.sin(angle + Math.PI / 6)
+      );
+      ctx.stroke();
+    }
+
+    // Draw the vector field
+    function drawVectorField() {
+      canvas.width  = document.getElementById('canvasContainer').clientWidth;
+      canvas.height = document.getElementById('canvasContainer').clientHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const stepSize = vectorDensity / zoom;
+      for (let x = 0; x <= canvas.width; x += stepSize) {
+        for (let y = 0; y <= canvas.height; y += stepSize) {
+          const theta  = ((x - canvas.width/2) / (40 * zoom) + offsetX);
+          const omega  = ((canvas.height/2 - y) / (40 * zoom) + offsetY) * verticalCompressionFactor;
+          const [dtheta, domega] = f(0, [theta, omega]);
+
+          let magnitude = Math.sqrt(dtheta*dtheta + domega*domega);
+          let scale = Math.min(15 / magnitude, 1) * vectorScale / zoom;
+
+          drawArrow(
+            x,
+            y,
+            x + dtheta * scale * 40,
+            y - domega * scale * 40 / verticalCompressionFactor,
+            vectorThickness,
+            'darkgreen'
+          );
+        }
+      }
+    }
+
+    // Optional integral line
+    function drawIntegralLine() {
+      if (!viewIntegralLine || !initialPoint) return;
+
+      ctx.beginPath();
+      ctx.moveTo(initialPoint.x, initialPoint.y);
+
+      let tLocal = 0;
+      let y = [
+        (initialPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - initialPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ];
+      const h = 0.1;
+
+      for (let i = 0; i < 1000; i++) {
+        y = rk4Step(tLocal, y, h);
+        tLocal += h;
+        const xCoord = (y[0] - offsetX) * 40 * zoom + canvas.width/2;
+        const yCoord = canvas.height/2 - (y[1]/verticalCompressionFactor - offsetY) * 40 * zoom;
+        ctx.lineTo(xCoord, yCoord);
+      }
+
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
+      ctx.lineWidth   = lineThickness; 
+      ctx.stroke();
+    }
+
+    // Draw the "feather" marker
+    function drawFeather(x, y, theta) {
+      if (featherImage.complete) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(theta);
+        ctx.drawImage(
+          featherImage,
+          -(featherImage.width * SCALING_FACTOR) / 2,
+          -(featherImage.height * SCALING_FACTOR) / 2,
+          featherImage.width * SCALING_FACTOR,
+          featherImage.height * SCALING_FACTOR
+        );
+        ctx.restore();
+      }
+    }
+
+    // Main draw
+    function draw() {
+      drawVectorField();
+      drawIntegralLine();
+      drawFeather(dragPoint.x, dragPoint.y, Alpha);
+    }
+
+    // Animation step for the dragged point
+    function animatePointStep() {
+      if (!animatePoint) return;
+      t += 0.05;
+
+      let y = [
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ];
+
+      y = rk4Step(t, y, 0.05);
+
+      // Integrate a "curl" effect to adjust rotation of the feather
+      Alpha -= computeCurl(dragPoint.x, dragPoint.y) * 0.01;
+
+      dragPoint.x = (y[0] - offsetX) * 40 * zoom + canvas.width/2;
+      dragPoint.y = canvas.height/2 - (y[1]/verticalCompressionFactor - offsetY) * 40 * zoom;
+
+      draw();
+      drawPendulum(y);
+
+      animationFrameId = requestAnimationFrame(animatePointStep);
+    }
+
+    // Draw the pendulum (300×300). It's always fully visible in bottom row.
+    function drawPendulum(y) {
+      if (pendulumCanvas.style.display === 'none') return;
+
+      pendulumCanvas.width  = 300;
+      pendulumCanvas.height = 300;
+      pendulumCtx.clearRect(0, 0, 300, 300);
+
+      const originX = 150; 
+      const originY = 150; 
+      const length  = 100; // about 1/3 of the canvas
+      const angle   = y[0];
+
+      const bobX = originX + length * Math.sin(angle);
+      const bobY = originY + length * Math.cos(angle);
+
+      // Rod
+      pendulumCtx.beginPath();
+      pendulumCtx.moveTo(originX, originY);
+      pendulumCtx.lineTo(bobX, bobY);
+      pendulumCtx.strokeStyle = 'brown';
+      pendulumCtx.lineWidth = 3;
+      pendulumCtx.stroke();
+
+      // Bob
+      pendulumCtx.beginPath();
+      pendulumCtx.arc(bobX, bobY, 10, 0, 2 * Math.PI);
+      pendulumCtx.fillStyle = 'brown';
+      pendulumCtx.fill();
+    }
+
+    // Curl function used for rotating the feather
+    function computeCurl(x, y) {
+      const theta = ((x - canvas.width / 2) / (40 * zoom) + offsetX);
+      const omega = ((canvas.height / 2 - y) / (40 * zoom) + offsetY) * verticalCompressionFactor;
+      const dF_y_dtheta = -(9.81 / bobWeight) * Math.cos(theta);
+      const dF_x_domega = 1;
+      return dF_y_dtheta - dF_x_domega;
+    }
+
+    /*
+      MOUSE BEHAVIOR:
+      - On mousedown:
+         1. Cancel any animation
+         2. Mark isDragging=true
+         3. Update the dragPoint to clicked location
+         4. Update initialPoint so the flow line is from this new location
+         5. Redraw (so flow line is updated)
+      - On mousemove:
+         if isDragging, keep updating dragPoint + integral line
+      - On mouseup:
+         isDragging=false, and if animatePoint is on, start animate
+    */
+
+    // Mouse down => stop anim, prepare for dragging
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Stop any existing animation
+      cancelAnimationFrame(animationFrameId);
+
+      isDragging = true;
+      dragPoint.x = x;
+      dragPoint.y = y;
+      initialPoint = { x, y };
+      t = 0;
+      Alpha = 0;
+
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    // Mouse move => if dragging, update the point & integral line
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const rect = canvas.getBoundingClientRect();
+      dragPoint.x = e.clientX - rect.left;
+      dragPoint.y = e.clientY - rect.top;
+
+      initialPoint = { x: dragPoint.x, y: dragPoint.y };
+      Alpha = 0;
+
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    // Mouse up => done dragging, if animate is on, resume
+    canvas.addEventListener('mouseup', () => {
+      isDragging = false;
+      if (animatePoint) {
+        animatePointStep();
+      }
+    });
+
+    // Zoom with scroll wheel
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+      zoom *= zoomFactor;
+
+      // Adjust offsets so zoom is centered on cursor
+      offsetX += (mouseX - canvas.width/2) / (40 * zoom) * (1 - 1/zoomFactor);
+      offsetY += (canvas.height/2 - mouseY) / (40 * zoom) * (1 - 1/zoomFactor);
+
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    // Slider & checkbox listeners
+    dampingSlider.addEventListener('input', () => {
+      damping = parseFloat(dampingSlider.value);
+      dampingValue.textContent = damping.toFixed(2);
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    vectorScaleSlider.addEventListener('input', () => {
+      vectorScale = parseFloat(vectorScaleSlider.value);
+      vectorScaleValue.textContent = vectorScale.toFixed(1);
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    vectorDensitySlider.addEventListener('input', () => {
+      vectorDensity = parseInt(vectorDensitySlider.value);
+      vectorDensityValue.textContent = vectorDensity;
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    vectorThicknessSlider.addEventListener('input', () => {
+      vectorThickness = parseFloat(vectorThicknessSlider.value);
+      vectorThicknessValue.textContent = vectorThickness.toFixed(1);
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    lineThicknessSlider.addEventListener('input', () => {
+      lineThickness = parseFloat(lineThicknessSlider.value);
+      lineThicknessValue.textContent = lineThickness.toFixed(1);
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    bobWeightSlider.addEventListener('input', () => {
+      bobWeight = parseFloat(bobWeightSlider.value);
+      bobWeightValue.textContent = bobWeight.toFixed(1);
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    integralLineToggle.addEventListener('change', () => {
+      viewIntegralLine = integralLineToggle.checked;
+      draw();
+      drawPendulum([
+        (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+        ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+      ]);
+    });
+
+    animatePointToggle.addEventListener('change', () => {
+      animatePoint = animatePointToggle.checked;
+      if (animatePoint && !isDragging) {
+        t = 0;
+        animatePointStep();
+      } else {
+        cancelAnimationFrame(animationFrameId);
+        draw();
+        drawPendulum([
+          (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+          ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+        ]);
+      }
+    });
+
+    pendulumToggle.addEventListener('change', () => {
+      pendulumCanvas.style.display = pendulumToggle.checked ? 'block' : 'none';
+      if (pendulumToggle.checked) {
+        drawPendulum([
+          (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+          ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+        ]);
+      }
+    });
+
+    // Initialize toggles & draws
+    viewIntegralLine = integralLineToggle.checked; // default true
+    animatePoint     = animatePointToggle.checked; // default true
+
+    // If user wants the pendulum shown from the start:
+    pendulumCanvas.style.display = pendulumToggle.checked ? 'block' : 'none';
+
+    // Initial draw
+    draw();
+    drawPendulum([
+      (dragPoint.x - canvas.width/2) / (40 * zoom) + offsetX,
+      ((canvas.height/2 - dragPoint.y) / (40 * zoom) + offsetY) * verticalCompressionFactor
+    ]);
+
+    // Start animation if animate is on
+    if (animatePoint) {
+      animatePointStep();
+    }
+  </script>
+</body>
+</html>
